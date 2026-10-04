@@ -225,15 +225,16 @@ function drawRuler() {
   const c = ink();
   // corner square
   ctx.fillStyle = c; ctx.fillRect(0, 0, V_STRIP, H_STRIP);
-  // baselines
+  // baselines docked flush to the screen edges
   ctx.strokeStyle = c; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(V_STRIP, H_STRIP - 1); ctx.lineTo(W, H_STRIP - 1); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(V_STRIP - 1, H_STRIP); ctx.lineTo(V_STRIP - 1, H); ctx.stroke();
-  drawTicksHorizontal(H_STRIP - 1, W - V_STRIP, true);
-  // shift origin for vertical ticks: draw in translated space
+  ctx.beginPath(); ctx.moveTo(0, H_STRIP - 1); ctx.lineTo(W, H_STRIP - 1); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(V_STRIP - 1, 0); ctx.lineTo(V_STRIP - 1, H); ctx.stroke();
+  // horizontal ticks: full width, zero at the left screen edge
+  drawTicksHorizontal(H_STRIP - 1, W, true);
+  // vertical ticks: full height, zero at the top screen edge
   ctx.save();
-  ctx.translate(V_STRIP - 1, H_STRIP);
-  drawTicksHorizontal(0, H - H_STRIP, false);
+  ctx.translate(V_STRIP - 1, 0);
+  drawTicksHorizontal(0, H, false);
   ctx.restore();
 }
 
