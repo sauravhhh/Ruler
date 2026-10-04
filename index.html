@@ -111,7 +111,14 @@ input[type=range]{ flex:1; accent-color:var(--ink); height:52px; }
 
 <div id="calOverlay" class="hidden">
   <h2>Calibrate</h2>
-  <p>Hold a real credit card flat against the screen. Adjust until the outline matches the card exactly.</p>
+  <p>Hold a real credit card or Indian coin flat against the screen. Adjust until the outline matches exactly.</p>
+  <div class="seg" id="calSeg" style="margin-bottom:8px;">
+    <button data-cal="card" class="on">Card</button>
+    <button data-cal="c1">₹1</button>
+    <button data-cal="c2">₹2</button>
+    <button data-cal="c5">₹5</button>
+    <button data-cal="c10">₹10</button>
+  </div>
   <div id="cardBox">CARD</div>
   <div id="cardDim">85.60 mm wide</div>
   <div class="calrow">
@@ -308,17 +315,46 @@ const calRange = document.getElementById('calRange');
 const calVal = document.getElementById('calVal');
 const calNote = document.getElementById('calNote');
 const CARD_MM = 85.6;
+/* calibration reference objects: credit card + Indian coins (2019 series diameters) */
+const CAL_ITEMS = {
+  card: { label: 'CARD', w: 85.6, h: 53.98, circle: false, dim: '85.60 mm wide' },
+  c1:   { label: '₹1', d: 20, circle: true },
+  c2:   { label: '₹2', d: 23, circle: true },
+  c5:   { label: '₹5', d: 25, circle: true },
+  c10:  { label: '₹10', d: 27, circle: true },
+};
+let calItemId = 'card';
 function calDraw() {
-  const w = Math.round(mmToPx(CARD_MM));
-  const h = Math.round(mmToPx(53.98));
-  cardBox.style.width = w + 'px';
-  cardBox.style.height = h + 'px';
+  const it = CAL_ITEMS[calItemId];
+  if (it.circle) {
+    const dpx = Math.round(mmToPx(it.d));
+    cardBox.style.width = dpx + 'px';
+    cardBox.style.height = dpx + 'px';
+    cardBox.style.borderRadius = '50%';
+    cardBox.textContent = it.label;
+    document.getElementById('cardDim').textContent = it.d + ' mm diameter · 2019 series';
+  } else {
+    const w = Math.round(mmToPx(it.w));
+    const h = Math.round(mmToPx(it.h));
+    cardBox.style.width = w + 'px';
+    cardBox.style.height = h + 'px';
+    cardBox.style.borderRadius = '10px';
+    cardBox.textContent = it.label;
+    document.getElementById('cardDim').textContent = it.dim;
+  }
   calVal.textContent = pxPerMm.toFixed(3) + ' px/mm';
 }
+document.querySelectorAll('#calSeg button').forEach(b => {
+  b.addEventListener('click', () => {
+    calItemId = b.dataset.cal;
+    document.querySelectorAll('#calSeg button').forEach(x => x.classList.toggle('on', x === b));
+    calDraw();
+  });
+});
 function calNoteDraw() {
   calNote.innerHTML = calibrated
     ? 'Calibrated · <b>' + pxPerMm.toFixed(2) + ' px/mm</b> — tap the gear to recalibrate'
-    : 'Uncalibrated — approximate. Tap the gear and hold a credit card to the screen.';
+    : 'Uncalibrated — approximate. Tap the gear and hold a credit card or coin to the screen.';
 }
 document.getElementById('calBtn').addEventListener('click', () => {
   calRange.value = pxPerMm;
