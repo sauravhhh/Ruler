@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Ruler</title>
+<meta name="description" content="A minimalist on-screen ruler. Calibrate with a credit card, then measure in cm or inches.">
+<meta name="theme-color" content="#ffffff">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<style>
+:root{
+  --bg:#ffffff; --ink:#111111; --muted:#8a8a8a; --line:#e8e8e8; --soft:#f4f4f4; --radius:14px;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#0d0d0d; --ink:#f2f2f2; --muted:#8f8f8f; --line:#262626; --soft:#1a1a1a; }
+}
+*{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body{ height:100%; }
+body{
+  margin:0; background:var(--bg); color:var(--ink); overscroll-behavior:none;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Helvetica,Arial,sans-serif;
+  display:flex; flex-direction:column; height:100dvh; overflow:hidden;
+  max-width:640px; margin:0 auto;
+}
+header{
+  flex:none; display:flex; align-items:center; gap:10px;
+  padding:10px 12px; border-bottom:1px solid var(--line);
+}
+header img{ width:34px; height:34px; border-radius:9px; }
+header h1{ margin:0; font-size:18px; font-weight:700; letter-spacing:-0.2px; flex:1; }
+.seg{ display:flex; border:1px solid var(--line); border-radius:11px; overflow:hidden; flex:none; }
+.seg button{
+  border:none; background:var(--bg); color:var(--muted); min-width:52px; height:38px; padding:0 12px;
+  font-size:13px; font-weight:700; cursor:pointer; font-family:inherit;
+}
+.seg button.on{ background:var(--ink); color:var(--bg); }
+.seg button + button{ border-left:1px solid var(--line); }
+.seg button.on + button{ border-left-color:transparent; }
+.icbtn{
+  border:1px solid var(--line); background:var(--bg); color:var(--ink);
+  width:42px; height:42px; border-radius:12px; cursor:pointer; flex:none;
+  display:flex; align-items:center; justify-content:center;
+}
+.icbtn:active{ background:var(--soft); }
+.icbtn svg{ width:20px; height:20px; }
+#calNote{
+  flex:none; font-size:12px; color:var(--muted); text-align:center;
+  padding:7px 12px; border-bottom:1px solid var(--line);
+}
+#calNote b{ color:var(--ink); }
+#stage{ flex:1; position:relative; overflow:hidden; }
+#cv{ position:absolute; inset:0; width:100%; height:100%; touch-action:none; }
+#readout{
+  position:absolute; left:50%; transform:translateX(-50%); bottom:calc(16px + env(safe-area-inset-bottom));
+  background:var(--ink); color:var(--bg); border-radius:14px; padding:12px 22px;
+  font-size:22px; font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap;
+  box-shadow:0 4px 18px rgba(0,0,0,.18); pointer-events:none;
+}
+#readout small{ display:block; font-size:12px; font-weight:400; opacity:.75; text-align:center; margin-top:2px; }
+/* calibration overlay */
+#calOverlay{
+  position:fixed; inset:0; background:var(--bg); z-index:50;
+  display:flex; flex-direction:column; align-items:center; padding:24px 20px 40px; overflow-y:auto;
+}
+#calOverlay.hidden{ display:none; }
+#calOverlay h2{ margin:6px 0 4px; font-size:20px; }
+#calOverlay p{ font-size:14px; color:var(--muted); line-height:1.55; text-align:center; max-width:340px; margin:0 0 18px; }
+#cardBox{
+  border:2px solid var(--ink); border-radius:10px; margin:10px auto 4px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:13px; font-weight:700; color:var(--ink);
+}
+#cardDim{ font-size:12px; color:var(--muted); margin-bottom:22px; font-variant-numeric:tabular-nums; }
+.calrow{ display:flex; align-items:center; gap:12px; width:100%; max-width:360px; margin-bottom:8px; }
+.calrow button{
+  width:52px; height:52px; border-radius:50%; border:1px solid var(--line); background:var(--bg);
+  color:var(--ink); font-size:24px; cursor:pointer; flex:none; font-family:inherit;
+}
+.calrow button:active{ background:var(--soft); }
+input[type=range]{ flex:1; accent-color:var(--ink); height:52px; }
+#calVal{ font-size:15px; font-weight:700; text-align:center; font-variant-numeric:tabular-nums; margin-bottom:20px; }
+.calbtns{ display:flex; gap:10px; width:100%; max-width:360px; }
+.btn{
+  flex:1; border:none; border-radius:12px; background:var(--ink); color:var(--bg);
+  font-size:15px; font-weight:700; padding:14px; cursor:pointer; font-family:inherit;
+}
+.btn.ghost{ background:var(--soft); color:var(--ink); border:1px solid var(--line); }
+</style>
+</head>
+<body>
+<header>
+  <img src="icons/icon-192.png" alt="Ruler icon">
+  <h1>Ruler</h1>
+  <div class="seg" id="unitSeg">
+    <button data-unit="cm" class="on">cm</button>
+    <button data-unit="in">in</button>
+  </div>
+  <button class="icbtn" id="calBtn" aria-label="Calibrate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.6 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.6-1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3h0a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5h0a1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9v0a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg></button>
+</header>
+<div id="calNote"></div>
+<div class="seg" id="modeSeg" style="margin:10px auto 0;">
+  <button data-mode="ruler" class="on">Ruler</button>
+  <button data-mode="measure">Measure</button>
+</div>
+<div id="stage">
+  <canvas id="cv"></canvas>
+  <div id="readout" style="display:none;"></div>
+</div>
+
+<div id="calOverlay" class="hidden">
+  <h2>Calibrate</h2>
+  <p>Hold a real credit card flat against the screen. Adjust until the outline matches the card exactly.</p>
+  <div id="cardBox">CARD</div>
+  <div id="cardDim">85.60 mm wide</div>
+  <div class="calrow">
+    <button id="calMinus" aria-label="Smaller">−</button>
+    <input type="range" id="calRange" min="2" max="6" step="0.005" value="3.78" aria-label="Calibration">
+    <button id="calPlus" aria-label="Larger">+</button>
+  </div>
+  <div id="calVal"></div>
+  <div class="calbtns">
+    <button class="btn ghost" id="calReset">Reset</button>
+    <button class="btn" id="calDone">Done</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ---------- units & calibration ---------- */
+const CSS_PX_PER_MM = 96 / 25.4; // CSS reference; true only on ~96dpi screens
+let pxPerMm = CSS_PX_PER_MM;
+let calibrated = false;
+let unit = 'cm';   // 'cm' | 'in'
+let mode = 'ruler';// 'ruler' | 'measure'
+
+function loadCal() {
+  try {
+    const v = parseFloat(localStorage.getItem('ruler-pxPerMm'));
+    if (v > 1 && v < 10) { pxPerMm = v; calibrated = true; }
+  } catch (e) {}
+}
+function saveCal() {
+  try { localStorage.setItem('ruler-pxPerMm', String(pxPerMm)); } catch (e) {}
+}
+function mmToPx(mm) { return mm * pxPerMm; }
+function pxToMm(px) { return px / pxPerMm; }
+function fmtLen(mm) {
+  if (unit === 'cm') return (mm / 10).toFixed(1) + ' cm';
+  return (mm / 25.4).toFixed(2) + ' in';
+}
+
+/* ---------- canvas ---------- */
+const cv = document.getElementById('cv'), stage = document.getElementById('stage');
+const ctx = cv.getContext('2d');
+const readoutEl = document.getElementById('readout');
+let W = 0, H = 0, dpr = 1;
+const css = getComputedStyle(document.body);
+function ink() { return css.getPropertyValue('--ink').trim() || '#111'; }
+function muted() { return css.getPropertyValue('--muted').trim() || '#8a8a8a'; }
+function bgc() { return css.getPropertyValue('--bg').trim() || '#fff'; }
+
+function resize() {
+  dpr = window.devicePixelRatio || 1;
+  W = stage.clientWidth; H = stage.clientHeight;
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  draw();
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', () => setTimeout(resize, 120));
+
+/* ---------- ruler drawing (L-shaped corner ruler) ---------- */
+const H_STRIP = 118, V_STRIP = 66;
+function drawTicksHorizontal(y0, len, horizontal) {
+  const c = ink(), m = muted();
+  ctx.strokeStyle = c; ctx.fillStyle = c;
+  ctx.lineWidth = 1.5;
+  ctx.font = '600 12px -apple-system, Segoe UI, Roboto, sans-serif';
+  ctx.textBaseline = 'top';
+  if (unit === 'cm') {
+    const totalMm = len / pxPerMm;
+    const mmInt = Math.floor(totalMm);
+    for (let mm = 0; mm <= mmInt; mm++) {
+      const p = mmToPx(mm);
+      let tickLen = 10, major = false, mid = false;
+      if (mm % 10 === 0) { tickLen = 30; major = true; }
+      else if (mm % 5 === 0) { tickLen = 20; mid = true; }
+      ctx.strokeStyle = major || mid ? c : m;
+      ctx.lineWidth = major ? 2 : 1;
+      ctx.beginPath();
+      if (horizontal) { ctx.moveTo(p, y0); ctx.lineTo(p, y0 + tickLen); }
+      else { ctx.moveTo(y0, p); ctx.lineTo(y0 + tickLen, p); }
+      ctx.stroke();
+      if (major && mm > 0) {
+        const label = String(mm / 10);
+        if (horizontal) ctx.fillText(label, p + 4, y0 + 34);
+        else { ctx.save(); ctx.translate(y0 + 34, p + 4); ctx.fillText(label, 0, 0); ctx.restore(); }
+      }
+    }
+  } else {
+    const totalIn = len / pxPerMm / 25.4;
+    const sixteenths = Math.floor(totalIn * 16);
+    for (let s = 0; s <= sixteenths; s++) {
+      const p = mmToPx(s * 25.4 / 16);
+      let tickLen = 10, major = false, mid = false;
+      if (s % 16 === 0) { tickLen = 30; major = true; }
+      else if (s % 8 === 0) { tickLen = 20; mid = true; }
+      ctx.strokeStyle = major || mid ? c : m;
+      ctx.lineWidth = major ? 2 : 1;
+      ctx.beginPath();
+      if (horizontal) { ctx.moveTo(p, y0); ctx.lineTo(p, y0 + tickLen); }
+      else { ctx.moveTo(y0, p); ctx.lineTo(y0 + tickLen, p); }
+      ctx.stroke();
+      if (major && s > 0) {
+        const label = String(s / 16);
+        if (horizontal) ctx.fillText(label, p + 4, y0 + 34);
+        else { ctx.save(); ctx.translate(y0 + 34, p + 4); ctx.fillText(label, 0, 0); ctx.restore(); }
+      }
+    }
+  }
+}
+function drawRuler() {
+  ctx.fillStyle = bgc(); ctx.fillRect(0, 0, W, H);
+  const c = ink();
+  // corner square
+  ctx.fillStyle = c; ctx.fillRect(0, 0, V_STRIP, H_STRIP);
+  // baselines
+  ctx.strokeStyle = c; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(V_STRIP, H_STRIP - 1); ctx.lineTo(W, H_STRIP - 1); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(V_STRIP - 1, H_STRIP); ctx.lineTo(V_STRIP - 1, H); ctx.stroke();
+  drawTicksHorizontal(H_STRIP - 1, W - V_STRIP, true);
+  // shift origin for vertical ticks: draw in translated space
+  ctx.save();
+  ctx.translate(V_STRIP - 1, H_STRIP);
+  drawTicksHorizontal(0, H - H_STRIP, false);
+  ctx.restore();
+}
+
+/* ---------- measure mode ---------- */
+const handles = [
+  { x: 0, y: 0 }, { x: 0, y: 0 }
+];
+let dragIdx = -1;
+function placeHandles() {
+  handles[0].x = W * 0.3; handles[0].y = H * 0.45;
+  handles[1].x = W * 0.7; handles[1].y = H * 0.55;
+}
+function drawMeasure() {
+  ctx.fillStyle = bgc(); ctx.fillRect(0, 0, W, H);
+  const c = ink();
+  const [a, b] = handles;
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const distMm = pxToMm(Math.hypot(dx, dy));
+  // connector line
+  ctx.strokeStyle = c; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+  // handles
+  [a, b].forEach((h, i) => {
+    ctx.beginPath(); ctx.arc(h.x, h.y, 24, 0, 7);
+    ctx.fillStyle = bgc(); ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = c; ctx.stroke();
+    ctx.beginPath(); ctx.arc(h.x, h.y, 4, 0, 7);
+    ctx.fillStyle = c; ctx.fill();
+    ctx.fillStyle = c; ctx.font = '700 13px -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(i === 0 ? 'A' : 'B', h.x, h.y - 38);
+  });
+  // readout
+  readoutEl.style.display = '';
+  readoutEl.innerHTML = fmtLen(distMm) +
+    '<small>' + (unit === 'cm' ? (distMm / 25.4).toFixed(2) + ' in' : (distMm / 10).toFixed(1) + ' cm') + '</small>';
+}
+function draw() {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (mode === 'ruler') { readoutEl.style.display = 'none'; drawRuler(); }
+  else drawMeasure();
+}
+function hitHandle(x, y) {
+  for (let i = handles.length - 1; i >= 0; i--) {
+    if (Math.hypot(handles[i].x - x, handles[i].y - y) < 34) return i;
+  }
+  return -1;
+}
+cv.addEventListener('pointerdown', e => {
+  if (mode !== 'measure' || !e.isPrimary) return;
+  e.preventDefault();
+  const r = cv.getBoundingClientRect();
+  const x = e.clientX - r.left, y = e.clientY - r.top;
+  const i = hitHandle(x, y);
+  if (i >= 0) { dragIdx = i; try { cv.setPointerCapture(e.pointerId); } catch (err) {} }
+});
+cv.addEventListener('pointermove', e => {
+  if (dragIdx < 0 || !e.isPrimary) return;
+  e.preventDefault();
+  const r = cv.getBoundingClientRect();
+  handles[dragIdx].x = Math.min(W, Math.max(0, e.clientX - r.left));
+  handles[dragIdx].y = Math.min(H, Math.max(0, e.clientY - r.top));
+  draw();
+});
+['pointerup', 'pointercancel'].forEach(t => cv.addEventListener(t, () => { dragIdx = -1; }));
+
+/* ---------- calibration ---------- */
+const calOverlay = document.getElementById('calOverlay');
+const cardBox = document.getElementById('cardBox');
+const calRange = document.getElementById('calRange');
+const calVal = document.getElementById('calVal');
+const calNote = document.getElementById('calNote');
+const CARD_MM = 85.6;
+function calDraw() {
+  const w = Math.round(mmToPx(CARD_MM));
+  const h = Math.round(mmToPx(53.98));
+  cardBox.style.width = w + 'px';
+  cardBox.style.height = h + 'px';
+  calVal.textContent = pxPerMm.toFixed(3) + ' px/mm';
+}
+function calNoteDraw() {
+  calNote.innerHTML = calibrated
+    ? 'Calibrated · <b>' + pxPerMm.toFixed(2) + ' px/mm</b> — tap the gear to recalibrate'
+    : 'Uncalibrated — approximate. Tap the gear and hold a credit card to the screen.';
+}
+document.getElementById('calBtn').addEventListener('click', () => {
+  calRange.value = pxPerMm;
+  calDraw();
+  calOverlay.classList.remove('hidden');
+});
+document.getElementById('calDone').addEventListener('click', () => {
+  calibrated = true; saveCal(); calNoteDraw();
+  calOverlay.classList.add('hidden'); draw();
+});
+document.getElementById('calReset').addEventListener('click', () => {
+  pxPerMm = CSS_PX_PER_MM; calibrated = false;
+  try { localStorage.removeItem('ruler-pxPerMm'); } catch (e) {}
+  calRange.value = pxPerMm; calDraw(); calNoteDraw();
+});
+calRange.addEventListener('input', () => { pxPerMm = parseFloat(calRange.value); calDraw(); });
+function nudge(d) {
+  pxPerMm = Math.min(6, Math.max(2, +(pxPerMm + d).toFixed(3)));
+  calRange.value = pxPerMm; calDraw();
+}
+document.getElementById('calMinus').addEventListener('click', () => nudge(-0.02));
+document.getElementById('calPlus').addEventListener('click', () => nudge(0.02));
+
+/* ---------- toggles ---------- */
+document.querySelectorAll('#unitSeg button').forEach(b => {
+  b.addEventListener('click', () => {
+    unit = b.dataset.unit;
+    document.querySelectorAll('#unitSeg button').forEach(x => x.classList.toggle('on', x === b));
+    draw();
+  });
+});
+document.querySelectorAll('#modeSeg button').forEach(b => {
+  b.addEventListener('click', () => {
+    mode = b.dataset.mode;
+    document.querySelectorAll('#modeSeg button').forEach(x => x.classList.toggle('on', x === b));
+    draw();
+  });
+});
+
+/* ---------- init ---------- */
+loadCal();
+calNoteDraw();
+requestAnimationFrame(() => { resize(); placeHandles(); draw(); });
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+</script>
+</body>
+</html>
